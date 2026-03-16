@@ -4,81 +4,67 @@ import { MainCard } from "../components/MainCard";
 import { ContentBox } from "../components/ContentBox";
 import { Header } from "../components/Header";
 import { DateAndTime } from "../components/DateAndTime";
-import { Search } from "../components/Search";
 import { MetricsBox } from "../components/MetricsBox";
-import { UnitSwitch } from "../components/UnitSwitch";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { ErrorScreen } from "../components/ErrorScreen";
 
 import styles from "../styles/Home.module.css";
+import { getActualWeather } from "./api/data";
+import city from "../configuration/city.json";
+
 
 export const App = () => {
-  const [cityInput, setCityInput] = useState("Riga");
-  const [triggerFetch, setTriggerFetch] = useState(true);
-  const [weatherData, setWeatherData] = useState();
-  const [unitSystem, setUnitSystem] = useState("metric");
+  const [weatherData, setWeatherData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => { 
+    const fetchWeather = async () => {
+      setIsLoading(true);
+      const data = await getActualWeather();
+      setIsLoading(false);
+      setWeatherData(data);
+    };
+    fetchWeather();
+    const refreshWeatherInterval = setInterval(fetchWeather, 1000 * 60 * 60); // refresh every hour
+
+    return () => clearInterval(refreshWeatherInterval);
+  }, []);
 
   useEffect(() => {
-    const getData = async () => {
-      const res = await fetch("api/data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cityInput }),
-      });
-      const data = await res.json();
-      setWeatherData({ ...data });
-      setCityInput("");
-    };
-    getData();
-  }, [triggerFetch]);
+    const refreshCurrentTime = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000 * 60); // refresh every minute
 
-  const changeSystem = () =>
-    unitSystem == "metric"
-      ? setUnitSystem("imperial")
-      : setUnitSystem("metric");
+    return () => clearInterval(refreshCurrentTime);
+  }, []);
 
-  return weatherData && !weatherData.message ? (
+  return isLoading ? (
+    <LoadingScreen loadingMessage="Loading data..." />
+  ) : weatherData && weatherData.error ? (
+    <ErrorScreen errorMessage={weatherData.reason}>
+    </ErrorScreen>  
+    ) : weatherData ? (
     <div className={styles.wrapper}>
       <MainCard
-        city={weatherData.name}
-        country={weatherData.sys.country}
-        description={weatherData.weather[0].description}
-        iconName={weatherData.weather[0].icon}
-        unitSystem={unitSystem}
+        city={city.city}
+        country={city.country}
+        description={""}
+        iconName={weatherData.weather_icon}
         weatherData={weatherData}
       />
       <ContentBox>
         <Header>
-          <DateAndTime weatherData={weatherData} unitSystem={unitSystem} />
-          <Search
-            placeHolder="Search a city..."
-            value={cityInput}
-            onFocus={(e) => {
-              e.target.value = "";
-              e.target.placeholder = "";
-            }}
-            onChange={(e) => setCityInput(e.target.value)}
-            onKeyDown={(e) => {
-              e.keyCode === 13 && setTriggerFetch(!triggerFetch);
-              e.target.placeholder = "Search a city...";
-            }}
+          <DateAndTime 
+            weatherData={weatherData} 
+            time={currentTime}
           />
         </Header>
-        <MetricsBox weatherData={weatherData} unitSystem={unitSystem} />
-        <UnitSwitch onClick={changeSystem} unitSystem={unitSystem} />
+        <MetricsBox weatherData={weatherData} />
       </ContentBox>
     </div>
-  ) : weatherData && weatherData.message ? (
-    <ErrorScreen errorMessage="City not found, try again!">
-      <Search
-        onFocus={(e) => (e.target.value = "")}
-        onChange={(e) => setCityInput(e.target.value)}
-        onKeyDown={(e) => e.keyCode === 13 && setTriggerFetch(!triggerFetch)}
-      />
-    </ErrorScreen>
-  ) : (
-    <LoadingScreen loadingMessage="Loading data..." />
-  );
+  ) : (<LoadingScreen loadingMessage="Loading data..." />)
 };
 
 export default App;
+
